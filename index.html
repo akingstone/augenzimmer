@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#000000">
+<title>Augenzimmer</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  body { -webkit-user-select: none; user-select: none; cursor: none; }
+  video, canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  video { object-fit: cover; background: #000; }
+  #hinweis {
+    position: fixed; left: 50%; bottom: 6%; transform: translateX(-50%);
+    font: 14px/1.4 -apple-system, Helvetica, Arial, sans-serif; color: #aaa;
+    background: rgba(0,0,0,.6); padding: 8px 14px; border-radius: 8px;
+    transition: opacity 1s; text-align: center; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<video id="video" muted loop playsinline webkit-playsinline autoplay preload="auto"></video>
+<canvas id="ersatz" hidden></canvas>
+<div id="hinweis">Tippen = Vollbild</div>
+
+<script>
+// ---------------------------------------------------------------
+// Augenzimmer – spielt das Augen-Video in Dauerschleife.
+// Video-Datei: video/auge.mp4 (H.264-MP4, am besten unter 25 MB).
+// Fehlt die Datei, zeigt die Seite ein gezeichnetes Ersatz-Auge.
+// ---------------------------------------------------------------
+var VIDEO = 'video/auge.mp4';
+
+var video = document.getElementById('video');
+var canvas = document.getElementById('ersatz');
+var hinweis = document.getElementById('hinweis');
+
+// Hinweis nach ein paar Sekunden ausblenden
+setTimeout(function () { hinweis.style.opacity = 0; }, 4000);
+
+// Video laden; bei Fehler Ersatz-Auge zeigen
+video.src = VIDEO;
+video.addEventListener('error', zeigeErsatzAuge);
+var p = video.play();
+if (p && p.catch) p.catch(function () { /* Autoplay blockiert: startet beim Tippen */ });
+
+// Tippen: Video starten + Vollbild
+document.addEventListener('click', function () {
+  video.play && video.play();
+  var el = document.documentElement;
+  var fs = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (fs && !document.fullscreenElement && !document.webkitFullscreenElement) {
+    try { fs.call(el); } catch (e) {}
+  }
+  wachHalten();
+});
+
+// Bildschirm wach halten (geht nur über HTTPS, z. B. GitHub Pages)
+var sperre = null;
+function wachHalten() {
+  if ('wakeLock' in navigator && !sperre) {
+    navigator.wakeLock.request('screen').then(function (s) {
+      sperre = s; s.addEventListener('release', function () { sperre = null; });
+    }).catch(function () {});
+  }
+}
+wachHalten();
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState === 'visible') { wachHalten(); video.play && video.play(); }
+});
+
+// ---------------- Ersatz-Auge (Canvas) ----------------
+function zeigeErsatzAuge() {
+  video.hidden = true; canvas.hidden = false;
+  var ctx = canvas.getContext('2d');
+  var w, h, dpr;
+  function groesse() {
+    dpr = window.devicePixelRatio || 1;
+    w = canvas.width = innerWidth * dpr; h = canvas.height = innerHeight * dpr;
+  }
+  groesse(); addEventListener('resize', groesse);
+
+  var blick = { x: 0, y: 0 }, ziel = { x: 0, y: 0 };
+  var naechsterBlick = 0, lid = 1, lidZiel = 1, naechstesBlinzeln = 2000;
+
+  function form(cx, cy, rx, ry, offen) {
+    var oy = ry * offen;
+    ctx.beginPath();
+    ctx.moveTo(cx - rx, cy);
+    ctx.quadraticCurveTo(cx, cy - oy * 2, cx + rx, cy);
+    ctx.quadraticCurveTo(cx, cy + oy * 2, cx - rx, cy);
+    ctx.closePath();
+  }
+
+  function bild(t) {
+    if (t > naechsterBlick) {
+      ziel.x = (Math.random() * 2 - 1); ziel.y = (Math.random() * 2 - 1) * 0.5;
+      naechsterBlick = t + 1200 + Math.random() * 2500;
+    }
+    if (t > naechstesBlinzeln) { lidZiel = 0; naechstesBlinzeln = t + 2500 + Math.random() * 4000; }
+    if (lid < 0.05) lidZiel = 1;
+    lid += (lidZiel - lid) * (lidZiel < lid ? 0.45 : 0.18);
+    blick.x += (ziel.x - blick.x) * 0.08; blick.y += (ziel.y - blick.y) * 0.08;
+
+    var cx = w / 2, cy = h / 2, rx = Math.min(w * 0.45, h * 0.8), ry = rx * 0.42;
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+
+    ctx.save();
+    form(cx, cy, rx, ry, Math.max(lid, 0.02));
+    ctx.fillStyle = '#f3efe6'; ctx.fill();
+    ctx.clip();
+    var ir = ry * 0.95, ix = cx + blick.x * rx * 0.45, iy = cy + blick.y * ry * 0.4;
+    var g = ctx.createRadialGradient(ix, iy, ir * 0.2, ix, iy, ir);
+    g.addColorStop(0, '#6fb2c9'); g.addColorStop(0.7, '#2a6f8c'); g.addColorStop(1, '#123444');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ix, iy, ir, 0, 7); ctx.fill();
+    ctx.fillStyle = '#050505'; ctx.beginPath(); ctx.arc(ix, iy, ir * 0.42, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath();
+    ctx.arc(ix - ir * 0.25, iy - ir * 0.3, ir * 0.12, 0, 7); ctx.fill();
+    ctx.restore();
+
+    form(cx, cy, rx, ry, Math.max(lid, 0.02));
+    ctx.lineWidth = Math.max(3, rx * 0.02); ctx.strokeStyle = '#f3efe6'; ctx.stroke();
+
+    requestAnimationFrame(bild);
+  }
+  requestAnimationFrame(bild);
+}
+</script>
+</body>
+</html>
