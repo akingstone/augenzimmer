@@ -14,10 +14,12 @@ und kann später wieder aufgegriffen werden. Die Datei `video/auge_echt.mp4` geh
 
 ## Neues Augen-Video einsetzen
 
-Neue Aufnahme (iPhone, .mov) stabilisieren und umwandeln, dann die Zeiten unter `CLIP` in `index.html` anpassen:
+iPhone-Videos sind HDR (HLG). So entstehen `video/auge.mp4` und `video/auge_echt.mp4`:
 ```
-ffmpeg -i IMG_xxxx.mov -vf "vidstabdetect=tripod=60:result=t.trf" -f null -
-ffmpeg -i IMG_xxxx.mov -vf "vidstabtransform=input=t.trf:tripod=1:zoom=6,crop=iw:iw*9/16,scale=1280:720" -an -c:v libx264 -crf 23 -g 5 -pix_fmt yuv420p -movflags +faststart video/auge_echt.mp4
+# 1. HDR -> normales Video
+ffmpeg -i IMG_xxxx.mov -vf "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p" -an -c:v libx264 -crf 12 tm.mp4
+# 2. Wackeln herausrechnen (verfolgt Haut und Brauen, nicht das Auge), entrauschen, 1280x720
+python3 werkzeug/auge_stabilisieren.py tm.mp4 video/auge.mp4      # braucht werkzeug/path.py, OpenCV, SciPy
 ```
 Die .mov-Originale werden nicht ins Repo übernommen (`.gitignore`).
 
