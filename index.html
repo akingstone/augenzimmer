@@ -10,124 +10,245 @@
 <title>Augenzimmer</title>
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
-  body { -webkit-user-select: none; user-select: none; cursor: none; }
-  video, canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-  video { object-fit: cover; background: #000; }
-  #hinweis {
-    position: fixed; left: 50%; bottom: 6%; transform: translateX(-50%);
-    font: 14px/1.4 -apple-system, Helvetica, Arial, sans-serif; color: #aaa;
-    background: rgba(0,0,0,.6); padding: 8px 14px; border-radius: 8px;
-    transition: opacity 1s; text-align: center; pointer-events: none;
-  }
+  body { -webkit-user-select: none; user-select: none; font-family: -apple-system, Helvetica, Arial, sans-serif; }
+  video#news, canvas#auge, canvas#stoer { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  canvas#auge { opacity: 0; }
+  canvas#stoer { opacity: 0; image-rendering: pixelated; pointer-events: none; }
+  #start { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column;
+           background: #000; color: #ddd; font-size: 20px; text-align: center; z-index: 10; cursor: pointer; }
+  #start small { color: #777; font-size: 14px; margin-top: 10px; max-width: 80%; }
+  #debug { position: fixed; left: 8px; top: 8px; z-index: 9; color: #0f0; font: 12px monospace; background: rgba(0,0,0,.6);
+           padding: 6px; display: none; }
+  #debug canvas { display: block; width: 160px; height: 120px; image-rendering: pixelated; margin-top: 4px; }
 </style>
 </head>
 <body>
-<video id="video" muted loop playsinline webkit-playsinline autoplay preload="auto"></video>
-<canvas id="ersatz" hidden></canvas>
-<div id="hinweis">Tippen = Vollbild</div>
+<video id="news" src="video/nachrichten.mp4" muted loop playsinline webkit-playsinline preload="auto"></video>
+<canvas id="auge" width="1280" height="720"></canvas>
+<canvas id="stoer" width="160" height="90"></canvas>
+<div id="start">Tippen zum Starten<small>Die Seite fragt nach der Kamera. Sie erkennt nur Bewegung, es wird nichts aufgenommen oder gesendet.</small></div>
+<div id="debug"><span id="dtext"></span><canvas id="dcam" width="80" height="60"></canvas></div>
 
 <script>
-// ---------------------------------------------------------------
-// Augenzimmer – spielt das Augen-Video in Dauerschleife.
-// Video-Datei: video/auge.mp4 (H.264-MP4, am besten unter 25 MB).
-// Fehlt die Datei, zeigt die Seite ein gezeichnetes Ersatz-Auge.
-// ---------------------------------------------------------------
-var VIDEO = 'video/auge.mp4';
+// ---------------------------------------------------------------------------
+// Augenzimmer: Nachrichten in Schleife. Tritt jemand vor die Kamera: Störbild,
+// dann öffnet sich das gezeichnete Auge erschrocken und folgt der Person.
+// Ist niemand mehr da, schließt sich das Auge und die Nachrichten laufen weiter.
+//
+// Einstellungen über die Adresse, z. B. .../augenzimmer/?debug=1&spiegeln=0
+//   debug=1        Kamerabild und Messwerte einblenden
+//   spiegeln=0     Blickrichtung links/rechts umdrehen, falls das Auge wegschaut
+//   schwelle=0.03  Empfindlichkeit (kleiner = empfindlicher)
+//   warten=6       Sekunden ohne Person, bis das Auge sich schließt
+//   Taste A        Auge testweise auslösen (am Computer)
+// ---------------------------------------------------------------------------
+var P = new URLSearchParams(location.search);
+var DEBUG = P.get('debug') === '1';
+var MIRROR = P.get('spiegeln') !== '0';
+var SCHWELLE = parseFloat(P.get('schwelle') || '0.03');
+var WARTEN = parseFloat(P.get('warten') || '6');
 
-var video = document.getElementById('video');
-var canvas = document.getElementById('ersatz');
-var hinweis = document.getElementById('hinweis');
+var news = document.getElementById('news');
+var cv = document.getElementById('auge'), ctx = cv.getContext('2d');
+var st = document.getElementById('stoer'), sctx = st.getContext('2d');
+var dbg = document.getElementById('debug'), dtext = document.getElementById('dtext');
+var dcam = document.getElementById('dcam'), dctx = dcam.getContext('2d');
+if (DEBUG) dbg.style.display = 'block';
 
-// Hinweis nach ein paar Sekunden ausblenden
-setTimeout(function () { hinweis.style.opacity = 0; }, 4000);
-
-// Video laden; bei Fehler Ersatz-Auge zeigen
-video.src = VIDEO;
-video.addEventListener('error', zeigeErsatzAuge);
-var p = video.play();
-if (p && p.catch) p.catch(function () { /* Autoplay blockiert: startet beim Tippen */ });
-
-// Tippen: Video starten + Vollbild
-document.addEventListener('click', function () {
-  video.play && video.play();
-  var el = document.documentElement;
-  var fs = el.requestFullscreen || el.webkitRequestFullscreen;
-  if (fs && !document.fullscreenElement && !document.webkitFullscreenElement) {
-    try { fs.call(el); } catch (e) {}
-  }
-  wachHalten();
+// ---------------- Bilder fürs Auge laden ----------------
+var geo = null, lids = [], iris = {};
+function ladeBild(src) { return new Promise(function (ok) { var i = new Image(); i.onload = function () { ok(i); }; i.src = src; }); }
+fetch('auge/geo.json').then(function (r) { return r.json(); }).then(function (g) {
+  geo = g;
+  var ps = g.cs.map(function (_, i) { return ladeBild('auge/lid' + (i < 10 ? '0' : '') + i + '.jpg'); });
+  return Promise.all(ps).then(function (a) { lids = a; });
+}).then(function () {
+  return Promise.all(['06', '08', '10'].map(function (k) { return ladeBild('auge/iris' + k + '.png').then(function (i) { iris[k] = i; }); }));
 });
 
-// Bildschirm wach halten (geht nur über HTTPS, z. B. GitHub Pages)
+// ---------------- Zustand des Auges ----------------
+var A = { c: 1, dx: 0, dy: 0, pupil: 1, zoom: 1, shake: 0, tx: 0, ty: 0 };
+var modus = 'news';           // news | stoer_rein | auge | zu | stoer_raus
+var modusSeit = 0, zuletztGesehen = 0, naechstesBlinzeln = 0;
+
+function setzeModus(m) { modus = m; modusSeit = performance.now(); }
+
+function lidIndex(c) {      // Position zwischen zwei vorgerenderten Lid-Bildern
+  var cs = geo.cs;
+  if (c <= cs[0]) return [0, 0, 0];
+  for (var i = 0; i < cs.length - 1; i++)
+    if (c <= cs[i + 1]) return [i, i + 1, (c - cs[i]) / (cs[i + 1] - cs[i])];
+  return [cs.length - 1, cs.length - 1, 0];
+}
+
+function oeffnung(c, oben, unten) {   // Pfad der sichtbaren Augenfläche (Bildkoordinaten der Zeichnung)
+  var x = geo.x, U = geo.U, L = geo.L, T = geo.T;
+  ctx.beginPath();
+  for (var i = 0; i < x.length; i++) {
+    var e = U[i] + c * (L[i] - U[i] - 3) * T[i];
+    ctx.lineTo(x[i], e + oben);
+  }
+  for (var j = x.length - 1; j >= 0; j--) ctx.lineTo(x[j], L[j] - unten);
+  ctx.closePath();
+}
+function schattenband(c) {
+  var x = geo.x, U = geo.U, L = geo.L, T = geo.T;
+  ctx.beginPath();
+  for (var i = 0; i < x.length; i++) ctx.lineTo(x[i], U[i] + c * (L[i] - U[i] - 3) * T[i] + 4);
+  for (var j = x.length - 1; j >= 0; j--) ctx.lineTo(x[j], U[j] + c * (L[j] - U[j] - 3) * T[j] + 22);
+  ctx.closePath();
+}
+
+function zeichneAuge() {
+  if (!geo || lids.length < geo.cs.length || !iris['10']) return;
+  var li = lidIndex(A.c), S = geo.S;
+  var sx = (Math.random() - 0.5) * A.shake, sy = (Math.random() - 0.5) * A.shake;
+  var z = A.zoom;
+  ctx.setTransform(z, 0, 0, z, 640 * (1 - z) + sx, 360 * (1 - z) + sy);
+  ctx.globalAlpha = 1; ctx.drawImage(lids[li[0]], 0, 0);
+  if (li[2] > 0.01) { ctx.globalAlpha = li[2]; ctx.drawImage(lids[li[1]], 0, 0); ctx.globalAlpha = 1; }
+  if (A.c > 0.97) return;
+  // Iris in die Augenöffnung zeichnen
+  ctx.save();
+  ctx.transform(S, 0, 0, S, 640 - S * geo.CX, 360 - S * geo.CY);
+  oeffnung(A.c, 4, 3.5); ctx.clip();
+  var k = A.pupil < 0.7 ? '06' : (A.pupil < 0.9 ? '08' : '10');
+  var R = geo.R, ix = geo.icx + A.dx, iy = geo.icy + A.dy;
+  ctx.drawImage(iris[k], ix - R, iy - R, 2 * R, 2 * R);
+  ctx.beginPath(); ctx.arc(ix, iy, R - 3, 0, 7); ctx.clip();
+  schattenband(A.c); ctx.fillStyle = 'rgba(0,0,0,0.13)'; ctx.fill();
+  ctx.restore();
+}
+
+// ---------------- Störbild ----------------
+function zeichneStoer(staerke) {
+  var img = sctx.createImageData(160, 90), d = img.data;
+  for (var i = 0; i < d.length; i += 4) { var v = Math.random() * 255; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+  sctx.putImageData(img, 0, 0);
+  var farben = ['#fff', '#ff0', '#0ff', '#0f0', '#f0f', '#f00', '#00f'];
+  for (var b = 0; b < 4; b++) {               // zerrissene Farbbalken
+    var y = Math.random() * 90, h = 2 + Math.random() * 10;
+    for (var f = 0; f < 7; f++) { sctx.fillStyle = farben[f]; sctx.globalAlpha = 0.6; sctx.fillRect(f * 23 + (Math.random() - .5) * 30, y, 23, h); }
+  }
+  sctx.globalAlpha = 1;
+  st.style.opacity = staerke;
+}
+
+// ---------------- Ablauf ----------------
+function ease(t) { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); }
+function schritt(now) {
+  var t = (now - modusSeit) / 1000;
+  if (modus === 'news') {
+    cv.style.opacity = 0; st.style.opacity = 0;
+  } else if (modus === 'stoer_rein') {
+    zeichneStoer(t < 0.15 ? 0.5 : 0.95);
+    if (t > 0.35) { news.style.opacity = 0; }
+    if (t > 0.7) { A.c = 1; A.pupil = 1; A.zoom = 1; A.dx = 0; A.dy = 0; cv.style.opacity = 1; st.style.opacity = 0; setzeModus('auge'); }
+  } else if (modus === 'auge') {
+    // 0–0,35 s geschlossen, dann Schreck: schnell weit auf, Pupille klein, Zittern
+    if (t < 0.35) { A.c = 1; }
+    else if (t < 0.5) { var u = (t - 0.35) / 0.15; A.c = 1 - 1.17 * (1 - Math.pow(1 - u, 3)); A.pupil = 1 - 0.45 * u; A.zoom = 1 + 0.08 * u; A.shake = 10 * u; }
+    else if (t < 1.6) { A.c = -0.16; A.pupil = 0.55; A.zoom = 1.07; A.shake = 6 * (1 - (t - 0.5) / 1.1); }
+    else if (t < 2.4) { var r = ease((t - 1.6) / 0.8); A.c = -0.16 * (1 - r); A.pupil = 0.55 + 0.4 * r; A.zoom = 1.07 - 0.07 * r; A.shake = 0; }
+    else {
+      A.c = Math.max(-0.05, Math.min(0.18, A.ty / 140));   // Lid folgt dem Blick etwas
+      A.pupil = 0.95;
+      if (now > naechstesBlinzeln) { blinzelnBis = now + 260; naechstesBlinzeln = now + 2500 + Math.random() * 4000; }
+      if (now < blinzelnBis) A.c = Math.max(A.c, Math.sin(Math.PI * (1 - (blinzelnBis - now) / 260)));
+      if ((now - zuletztGesehen) / 1000 > WARTEN) setzeModus('zu');
+    }
+    // Blick: ruckartig (Sakkade) zum Ziel
+    var ddx = A.tx - A.dx, ddy = A.ty - A.dy;
+    var f = (Math.abs(ddx) + Math.abs(ddy) > 12) ? 0.35 : 0.08;
+    A.dx += ddx * f; A.dy += ddy * f;
+    zeichneAuge();
+  } else if (modus === 'zu') {
+    A.c = Math.min(1, A.c + 0.035); A.tx = 0; A.ty = 0;
+    A.dx *= 0.95; A.dy *= 0.95;
+    zeichneAuge();
+    if (personDa && t > 0.3) setzeModus('auge_wieder');
+    if (A.c >= 1 && t > 1.0) setzeModus('stoer_raus');
+  } else if (modus === 'auge_wieder') {          // kommt die Person zurück, öffnet sich das Auge ohne Schreck
+    A.c = Math.max(0, A.c - 0.08); zeichneAuge();
+    if (A.c <= 0) { modusSeit = performance.now() - 2400; modus = 'auge'; }
+  } else if (modus === 'stoer_raus') {
+    zeichneStoer(0.95);
+    if (t > 0.25) { cv.style.opacity = 0; news.style.opacity = 1; }
+    if (t > 0.55) { st.style.opacity = 0; setzeModus('news'); }
+  }
+  requestAnimationFrame(schritt);
+}
+var blinzelnBis = 0;
+
+// ---------------- Kamera: Bewegung und Position erkennen ----------------
+var cam = document.createElement('video'); cam.muted = true; cam.playsInline = true; cam.setAttribute('playsinline', '');
+var KW = 80, KH = 60, kc = document.createElement('canvas'); kc.width = KW; kc.height = KH;
+var kctx = kc.getContext('2d', { willReadFrequently: true });
+var hintergrund = null, anteil = 0, personDa = false, treffer = 0, kameraOk = false;
+
+function messen() {
+  if (!kameraOk || cam.readyState < 2) return;
+  kctx.drawImage(cam, 0, 0, KW, KH);
+  var d = kctx.getImageData(0, 0, KW, KH).data, n = KW * KH;
+  var g = new Float32Array(n), mg = 0;
+  for (var i = 0; i < n; i++) { g[i] = d[4 * i] * 0.3 + d[4 * i + 1] * 0.59 + d[4 * i + 2] * 0.11; mg += g[i]; }
+  mg /= n;
+  if (!hintergrund) { hintergrund = g; return; }
+  var mb = 0; for (i = 0; i < n; i++) mb += hintergrund[i]; mb /= n;
+  var k = mb > 1 ? mg / mb : 1;               // Helligkeitsänderung der Kamera ausgleichen
+  var cnt = 0, sx = 0, sy = 0;
+  if (DEBUG) var dbgImg = dctx.createImageData(KW, KH);
+  for (i = 0; i < n; i++) {
+    var diff = Math.abs(g[i] - hintergrund[i] * k);
+    var fg = diff > 28;
+    if (fg) { cnt++; sx += i % KW; sy += (i / KW) | 0; }
+    hintergrund[i] += (g[i] / k - hintergrund[i]) * (fg ? 0.004 : 0.06);
+    if (DEBUG) { var p = 4 * i; dbgImg.data[p] = fg ? 255 : g[i] * .5; dbgImg.data[p + 1] = g[i] * .5; dbgImg.data[p + 2] = g[i] * .5; dbgImg.data[p + 3] = 255; }
+  }
+  anteil = anteil * 0.6 + (cnt / n) * 0.4;
+  if (anteil > SCHWELLE) { treffer++; } else { treffer = Math.max(0, treffer - 1); }
+  personDa = treffer >= 3;
+  if (personDa) {
+    zuletztGesehen = performance.now();
+    var gx = sx / cnt / KW, gy = sy / cnt / KH;
+    if (MIRROR) gx = 1 - gx;
+    A.tx = Math.max(-78, Math.min(78, (gx - 0.5) * 2 * 90));
+    A.ty = Math.max(-24, Math.min(24, (gy - 0.45) * 2 * 30));
+    if (modus === 'news') setzeModus('stoer_rein');
+  }
+  if (DEBUG) { dctx.putImageData(dbgImg, 0, 0); dtext.textContent = 'Bewegung ' + (anteil * 100).toFixed(1) + '%  Person: ' + (personDa ? 'ja' : 'nein') + '  ' + modus; }
+}
+
+function kameraStarten() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { ohneKamera(); return; }
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } }, audio: false })
+    .then(function (s) { cam.srcObject = s; cam.play(); kameraOk = true; setInterval(messen, 100); })
+    .catch(ohneKamera);
+}
+// Ohne Kamera: Auge alle 40 Sekunden für eine Weile zeigen, mit zufälligen Blicken
+function ohneKamera() {
+  if (DEBUG) dtext.textContent = 'Keine Kamera – Zufallsmodus';
+  setInterval(function () { if (modus === 'news') { zuletztGesehen = performance.now() + 9000; setzeModus('stoer_rein'); } }, 40000);
+  setInterval(function () { A.tx = (Math.random() - .5) * 150; A.ty = (Math.random() - .5) * 40; }, 1400);
+}
+
+// ---------------- Start, Vollbild, Bildschirm wach halten ----------------
 var sperre = null;
 function wachHalten() {
-  if ('wakeLock' in navigator && !sperre) {
-    navigator.wakeLock.request('screen').then(function (s) {
-      sperre = s; s.addEventListener('release', function () { sperre = null; });
-    }).catch(function () {});
-  }
+  if ('wakeLock' in navigator && !sperre)
+    navigator.wakeLock.request('screen').then(function (s) { sperre = s; s.addEventListener('release', function () { sperre = null; }); }).catch(function () {});
 }
-wachHalten();
-document.addEventListener('visibilitychange', function () {
-  if (document.visibilityState === 'visible') { wachHalten(); video.play && video.play(); }
+document.getElementById('start').addEventListener('click', function () {
+  this.style.display = 'none';
+  var el = document.documentElement, fs = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (fs) { try { fs.call(el); } catch (e) {} }
+  news.play(); wachHalten(); kameraStarten();
+  requestAnimationFrame(schritt);
 });
-
-// ---------------- Ersatz-Auge (Canvas) ----------------
-function zeigeErsatzAuge() {
-  video.hidden = true; canvas.hidden = false;
-  var ctx = canvas.getContext('2d');
-  var w, h, dpr;
-  function groesse() {
-    dpr = window.devicePixelRatio || 1;
-    w = canvas.width = innerWidth * dpr; h = canvas.height = innerHeight * dpr;
-  }
-  groesse(); addEventListener('resize', groesse);
-
-  var blick = { x: 0, y: 0 }, ziel = { x: 0, y: 0 };
-  var naechsterBlick = 0, lid = 1, lidZiel = 1, naechstesBlinzeln = 2000;
-
-  function form(cx, cy, rx, ry, offen) {
-    var oy = ry * offen;
-    ctx.beginPath();
-    ctx.moveTo(cx - rx, cy);
-    ctx.quadraticCurveTo(cx, cy - oy * 2, cx + rx, cy);
-    ctx.quadraticCurveTo(cx, cy + oy * 2, cx - rx, cy);
-    ctx.closePath();
-  }
-
-  function bild(t) {
-    if (t > naechsterBlick) {
-      ziel.x = (Math.random() * 2 - 1); ziel.y = (Math.random() * 2 - 1) * 0.5;
-      naechsterBlick = t + 1200 + Math.random() * 2500;
-    }
-    if (t > naechstesBlinzeln) { lidZiel = 0; naechstesBlinzeln = t + 2500 + Math.random() * 4000; }
-    if (lid < 0.05) lidZiel = 1;
-    lid += (lidZiel - lid) * (lidZiel < lid ? 0.45 : 0.18);
-    blick.x += (ziel.x - blick.x) * 0.08; blick.y += (ziel.y - blick.y) * 0.08;
-
-    var cx = w / 2, cy = h / 2, rx = Math.min(w * 0.45, h * 0.8), ry = rx * 0.42;
-    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
-
-    ctx.save();
-    form(cx, cy, rx, ry, Math.max(lid, 0.02));
-    ctx.fillStyle = '#f3efe6'; ctx.fill();
-    ctx.clip();
-    var ir = ry * 0.95, ix = cx + blick.x * rx * 0.45, iy = cy + blick.y * ry * 0.4;
-    var g = ctx.createRadialGradient(ix, iy, ir * 0.2, ix, iy, ir);
-    g.addColorStop(0, '#6fb2c9'); g.addColorStop(0.7, '#2a6f8c'); g.addColorStop(1, '#123444');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ix, iy, ir, 0, 7); ctx.fill();
-    ctx.fillStyle = '#050505'; ctx.beginPath(); ctx.arc(ix, iy, ir * 0.42, 0, 7); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath();
-    ctx.arc(ix - ir * 0.25, iy - ir * 0.3, ir * 0.12, 0, 7); ctx.fill();
-    ctx.restore();
-
-    form(cx, cy, rx, ry, Math.max(lid, 0.02));
-    ctx.lineWidth = Math.max(3, rx * 0.02); ctx.strokeStyle = '#f3efe6'; ctx.stroke();
-
-    requestAnimationFrame(bild);
-  }
-  requestAnimationFrame(bild);
-}
+document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { wachHalten(); news.play(); } });
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'a' || e.key === 'A') { zuletztGesehen = performance.now(); if (modus === 'news') setzeModus('stoer_rein'); }
+});
 </script>
 </body>
 </html>

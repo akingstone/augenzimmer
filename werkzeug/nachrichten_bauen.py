@@ -42,6 +42,43 @@ def ticker_strip(items):
     s = Image.new('RGB', (tw, TICKER_H), NAVY); ImageDraw.Draw(s).text((0, 9), txt, font=fT, fill=WHITE)
     return np.asarray(s)
 
+def anchor_frames(seg, n):
+    """Gemalte Sprecherin aus dem Gedankenaufzug im Studio, spricht (Mund) und blinzelt."""
+    import cv2, math
+    tv = cv2.cvtColor(cv2.imread(seg['file']), cv2.COLOR_BGR2RGB)
+    tv = cv2.bilateralFilter(tv, 7, 30, 7)
+    th, tw = tv.shape[:2]
+    yy, xx = np.mgrid[0:H, 0:W]
+    bg = np.zeros((H, W, 3), np.float32)
+    g = np.clip(1 - np.hypot((xx - 820) / 900, (yy - 300) / 600), 0, 1)[..., None]
+    bg[:] = np.array([10, 22, 52]) * (1 - g) + np.array([38, 78, 150]) * g
+    for k in range(-6, 14):   # Studio-Linien
+        x = 120 * k + 40; cv2.line(bg, (x, 0), (x - 260, H), (60, 100, 170), 1, cv2.LINE_AA)
+    rng = np.random.default_rng(3)
+    mouth_h = 0.0
+    SKIN = tuple(int(v) for v in tv[205:210, 505:510].reshape(-1, 3).mean(0))
+    for i in range(n):
+        t = i / FPS
+        f = tv.copy()
+        # Mund: Sprechbewegung
+        target = 0 if (int(t * 4) % 7 == 6) else rng.uniform(2, 11)
+        mouth_h += (target - mouth_h) * 0.5
+        cv2.ellipse(f, (526, 220), (17, 9), 0, 0, 360, SKIN, -1, cv2.LINE_AA)
+        cv2.ellipse(f, (526, 220), (12, max(2, int(mouth_h / 2 + 2))), 0, 0, 360, (45, 28, 32), -1, cv2.LINE_AA)
+        # Blinzeln
+        if (t % 3.2) < 0.13:
+            for (ex, ey) in [(496, 166), (548, 161)]:
+                cv2.ellipse(f, (ex, ey), (15, 8), 0, 0, 360, SKIN, -1, cv2.LINE_AA)
+                cv2.line(f, (ex - 13, ey + 2), (ex + 13, ey + 2), (40, 30, 30), 3, cv2.LINE_AA)
+        z = 1.0 + 0.06 * t / (n / FPS)
+        hh = int(560 * z); ww = int(tw * hh / th)
+        fs = cv2.resize(f, (ww, hh), interpolation=cv2.INTER_CUBIC)
+        out = bg.copy(); x0 = W - ww - 90 + int(40 * (z - 1) / 0.06); y0 = (H - hh) // 2 - 30
+        x0 = max(0, min(W - ww, x0)); y0 = max(0, y0)
+        out[y0:y0 + hh, x0:x0 + ww] = fs[:H - y0, :W - x0]
+        cv2.rectangle(out, (x0, y0), (x0 + ww, y0 + hh), (230, 230, 235), 3)
+        yield out
+
 def clip_frames(seg, n):
     """Frames eines Clips (Video oder Standbild mit langsamem Zoom) als RGB-Arrays 1280x720."""
     src = seg.get('file')
@@ -55,6 +92,9 @@ def clip_frames(seg, n):
             cw, ch = int(im.width / z), int(im.height / z)
             x0 = (im.width - cw) // 2; y0 = (im.height - ch) // 2
             yield np.asarray(Image.fromarray(a[y0:y0 + ch, x0:x0 + cw]).resize((W, H), Image.BILINEAR))
+        return
+    if seg.get('anchor'):
+        yield from anchor_frames(seg, n)
         return
     if seg.get('placeholder'):
         for i in range(n):

@@ -9,6 +9,42 @@
  ],
  "segments": [
   {
+   "file": "Clips/_krieg_frei/Kyiv_after_Russian_shelling,_2022-10-10_(303).png",
+   "still": true,
+   "dur": 2.8,
+   "tag": "EILMELDUNG",
+   "headline": "Krieg in der Ukraine",
+   "sub": "Kyjiw · Raketenangriff, 10. Oktober 2022",
+   "credit": "Foto: Staatl. Katastrophenschutz der Ukraine, CC BY 4.0"
+  },
+  {
+   "file": "Clips/_krieg_frei/Kyiv_after_Russian_drone_attack,_2022-10-17_(54).png",
+   "still": true,
+   "dur": 2.8,
+   "tag": "EILMELDUNG",
+   "headline": "Krieg in der Ukraine",
+   "sub": "Kyjiw · Drohnenangriff, 17. Oktober 2022",
+   "credit": "Foto: Staatl. Katastrophenschutz der Ukraine, CC BY 4.0"
+  },
+  {
+   "file": "Clips/_krieg_frei/Kyiv_after_Russian_missile_attack,_2022-12-31_(07).png",
+   "still": true,
+   "dur": 2.8,
+   "tag": "EILMELDUNG",
+   "headline": "Krieg in der Ukraine",
+   "sub": "Kyjiw · Raketenangriff, 31. Dezember 2022",
+   "credit": "Foto: Staatl. Katastrophenschutz der Ukraine, CC BY 4.0"
+  },
+  {
+   "file": "Clips/_krieg_frei/Destructions_in_Kyiv_after_Russian_attack,_2024-02-07_(85).png",
+   "still": true,
+   "dur": 2.8,
+   "tag": "EILMELDUNG",
+   "headline": "Krieg in der Ukraine",
+   "sub": "Kyjiw · Angriff am 7. Februar 2024",
+   "credit": "Foto: Staatl. Katastrophenschutz der Ukraine, CC BY 4.0"
+  },
+  {
    "file": "Clips/_schnitt/feuer1.mp4",
    "dur": 5,
    "tag": "EILMELDUNG",
