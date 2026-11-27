@@ -11,7 +11,9 @@
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
   body { -webkit-user-select: none; user-select: none; cursor: none; }
-  video, canvas { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  html, body { height: 100%; height: 100dvh; }
+  /* ganzes 16:9-Bild immer sichtbar (auch mit Browserleiste), Rest bleibt schwarz */
+  video, canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100%; height: 100dvh; object-fit: contain; background: #000; }
   #auge { opacity: 0; }
   #stoer { opacity: 0; image-rendering: pixelated; pointer-events: none; }
 </style>

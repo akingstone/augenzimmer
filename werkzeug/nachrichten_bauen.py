@@ -12,7 +12,7 @@ fL = font('Inter-Black.otf', 26); fLive = font('Inter-Bold.otf', 18); fTag = fon
 
 RED = (200, 16, 30); NAVY = (12, 24, 52); WHITE = (255, 255, 255); INK = (15, 18, 28)
 SENDER = 'INNENWELT 24'
-TICKER_H = 44; LT_Y = H - TICKER_H - 150
+TICKER_H = 44; LT_Y = 400   # Bauchbinde weiter oben, damit sie auf dem Handy sicher sichtbar ist
 
 def overlay(headline, sub, tag, credit=None):
     o = Image.new('RGBA', (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(o)
@@ -23,13 +23,14 @@ def overlay(headline, sub, tag, credit=None):
     d.rectangle([x, 30, x + 64, 72], fill=RED + (255,)); d.text((x + 12, 41), 'LIVE', font=fLive, fill=WHITE)
     # lower third
     tw = d.textlength(tag, font=fTag) + 28
-    d.rectangle([60, LT_Y, 60 + tw, LT_Y + 34], fill=RED + (255,))
-    d.text((74, LT_Y + 6), tag, font=fTag, fill=WHITE)
     hw = max(d.textlength(headline, font=fB), d.textlength(sub, font=fS)) + 48
-    d.rectangle([60, LT_Y + 34, 60 + hw, LT_Y + 34 + 56], fill=(250, 250, 250, 245))
-    d.text((84, LT_Y + 40), headline, font=fB, fill=INK)
-    d.rectangle([60, LT_Y + 90, 60 + hw, LT_Y + 90 + 34], fill=NAVY + (235,))
-    d.text((84, LT_Y + 95), sub, font=fS, fill=WHITE)
+    X = int((W - hw) / 2)                                   # waagerecht mittig
+    d.rectangle([X, LT_Y, X + tw, LT_Y + 34], fill=RED + (255,))
+    d.text((X + 14, LT_Y + 6), tag, font=fTag, fill=WHITE)
+    d.rectangle([X, LT_Y + 34, X + hw, LT_Y + 34 + 56], fill=(250, 250, 250, 245))
+    d.text((X + 24, LT_Y + 40), headline, font=fB, fill=INK)
+    d.rectangle([X, LT_Y + 90, X + hw, LT_Y + 90 + 34], fill=NAVY + (235,))
+    d.text((X + 24, LT_Y + 95), sub, font=fS, fill=WHITE)
     if credit:
         fc = font('Inter-Medium.otf', 15); cw = d.textlength(credit, font=fc)
         d.rectangle([W - cw - 46, 32, W - 30, 56], fill=(0, 0, 0, 140)); d.text((W - cw - 38, 35), credit, font=fc, fill=(235, 235, 235))
