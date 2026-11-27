@@ -6,11 +6,14 @@ Ein altes Handy steckt als Bildschirm im Zimmer und spielt das Augen-Video in Da
 ## Ablauf auf dem Handy
 
 Die Nachrichten (`video/nachrichten.mp4`) laufen in Schleife. Erkennt die Frontkamera eine Person vor dem Zimmer, kommt ein Störbild,
-das gezeichnete Auge reißt erschrocken auf und folgt der Person mit dem Blick. Ist 6 Sekunden niemand mehr da, schließt es sich
+Annikas gefilmtes Auge (`video/auge_echt.mp4`) reißt erschrocken auf und folgt der Person mit dem Blick. Ist 6 Sekunden niemand mehr da, schließt es sich
 und die Nachrichten laufen weiter. Das Kamerabild wird nur im Handy ausgewertet, nichts wird gespeichert oder gesendet.
 
-Das Auge wird live aus Einzelteilen zusammengesetzt (`auge/`: Lid-Stellungen, Iris, Geometrie), damit es der Person folgen kann.
-`video/auge.mp4` ist die feste Fassung (z. B. für den Video-Link in der Mappe).
+Für das Nachverfolgen springt die Seite im Augen-Video an die passende Stelle (Zeiten oben in `index.html` unter `CLIP`):
+geschlossen 0,6 s · Aufreißen ab 1,1 s · links 5,5 s · rechts 3,55 s · oben 3,1 s · unten 7,4 s · geradeaus 8,6–10,5 s (Schleife) · Schließen ab 10,6 s.
+`auge_echt.mp4` ist aus `IMG_1214.mov` entstanden: stabilisiert, auf 16:9 zugeschnitten, mit dichten Schlüsselbildern für schnelles Springen.
+`video/auge.mp4` ist dieselbe Aufnahme als normales Video (z. B. für den Video-Link in der Mappe).
+Der Ordner `auge/` (gezeichnetes Auge) wird nicht mehr benutzt.
 
 Einstellungen über die Adresse, z. B. `https://akingstone.github.io/augenzimmer/?debug=1`:
 - `debug=1` – Kamerabild und Messwerte anzeigen
@@ -19,17 +22,14 @@ Einstellungen über die Adresse, z. B. `https://akingstone.github.io/augenzimmer
 - `warten=10` – Sekunden ohne Person, bis das Auge zugeht (Standard 6)
 - Am Computer: Taste `A` löst das Auge testweise aus
 
-## Video einfügen
+## Neues Augen-Video einsetzen
 
-1. Das Video als **`auge.mp4`** in den Ordner `video/` legen.
-2. Format: MP4 (H.264), Hochformat oder Querformat passend zum Handy im Zimmer, **unter 25 MB** (GitHub erlaubt höchstens 100 MB pro Datei).
-3. Ein iPhone-Video (.mov/HEVC) vorher umwandeln, z. B. mit HandBrake (Preset „Fast 1080p30“) oder:
-   ```
-   ffmpeg -i auge.mov -c:v libx264 -crf 26 -preset veryfast -an -movflags +faststart auge.mp4
-   ```
-   Ton wird weggelassen, weil der Browser stummes Video automatisch abspielen darf.
-
-Solange `video/auge.mp4` fehlt, zeigt die Seite ein gezeichnetes Ersatz-Auge, das blinzelt und sich umschaut.
+Neue Aufnahme (iPhone, .mov) stabilisieren und umwandeln, dann die Zeiten unter `CLIP` in `index.html` anpassen:
+```
+ffmpeg -i IMG_xxxx.mov -vf "vidstabdetect=tripod=60:result=t.trf" -f null -
+ffmpeg -i IMG_xxxx.mov -vf "vidstabtransform=input=t.trf:tripod=1:zoom=6,crop=iw:iw*9/16,scale=1280:720" -an -c:v libx264 -crf 23 -g 5 -pix_fmt yuv420p -movflags +faststart video/auge_echt.mp4
+```
+Die .mov-Originale werden nicht ins Repo übernommen (`.gitignore`).
 
 ## Veröffentlichen mit GitHub Pages
 
@@ -57,4 +57,4 @@ Neu bauen: `python3 werkzeug/nachrichten_bauen.py werkzeug/nachrichten_segmente.
 - Leine-Hochwasser Hemmingen 2017: Wikimedia Commons, CC0
 - Ahrtal 2021: Jean-Christophe Verhaegen / © European Union, CC BY 4.0 (Wikimedia Commons, „Consequences of the floodings in Ahrweiler, Germany“ Nr. 3, 28, 55)
 - Hurrikane 2017: NASA Goddard, „Intense String of Hurricanes Seen From Space“, gemeinfrei
-- Augen-Video: Zeichnung „Trauer“ von Annika Königstein, animiert
+- Augen-Video: eigene Aufnahme von Annika Königstein
