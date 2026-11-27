@@ -10,195 +10,80 @@
 <title>Augenzimmer</title>
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
-  body { -webkit-user-select: none; user-select: none; font-family: -apple-system, Helvetica, Arial, sans-serif; }
-  video#news, video#augeV, canvas#stoer { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-  video#augeV { opacity: 0; transition: transform .08s; }
-  canvas#stoer { opacity: 0; image-rendering: pixelated; pointer-events: none; }
-  #start { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column;
-           background: #000; color: #ddd; font-size: 20px; text-align: center; z-index: 10; cursor: pointer; }
-  #start small { color: #777; font-size: 14px; margin-top: 10px; max-width: 80%; }
-  #debug { position: fixed; left: 8px; top: 8px; z-index: 9; color: #0f0; font: 12px monospace; background: rgba(0,0,0,.6);
-           padding: 6px; display: none; }
-  #debug canvas { display: block; width: 160px; height: 120px; image-rendering: pixelated; margin-top: 4px; }
+  body { -webkit-user-select: none; user-select: none; cursor: none; }
+  video, canvas { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  #auge { opacity: 0; }
+  #stoer { opacity: 0; image-rendering: pixelated; pointer-events: none; }
 </style>
 </head>
 <body>
-<video id="news" src="video/nachrichten.mp4" muted loop playsinline webkit-playsinline preload="auto"></video>
-<video id="augeV" src="video/auge_echt.mp4" muted playsinline webkit-playsinline preload="auto"></video>
+<video id="news" src="video/nachrichten.mp4" muted playsinline webkit-playsinline autoplay preload="auto"></video>
+<video id="auge" src="video/auge.mp4" muted playsinline webkit-playsinline preload="auto"></video>
 <canvas id="stoer" width="160" height="90"></canvas>
-<div id="start">Tippen zum Starten<small>Die Seite fragt nach der Kamera. Sie erkennt nur Bewegung, es wird nichts aufgenommen oder gesendet.</small></div>
-<div id="debug"><span id="dtext"></span><canvas id="dcam" width="80" height="60"></canvas></div>
 
 <script>
 // ---------------------------------------------------------------------------
-// Augenzimmer: Nachrichten in Schleife. Tritt jemand vor die Kamera: Störbild,
-// dann reißt das (gefilmte) Auge erschrocken auf und folgt der Person mit dem Blick.
-// Ist niemand mehr da, schließt sich das Auge und die Nachrichten laufen weiter.
-//
-// Einstellungen über die Adresse, z. B. .../augenzimmer/?debug=1&spiegeln=0
-//   debug=1        Kamerabild und Messwerte einblenden
-//   spiegeln=0     Blickrichtung links/rechts umdrehen, falls das Auge wegschaut
-//   schwelle=0.03  Empfindlichkeit (kleiner = empfindlicher)
-//   warten=6       Sekunden ohne Person, bis das Auge sich schließt
-//   Taste A        Auge testweise auslösen (am Computer)
+// Augenzimmer – einfache Schleife:
+// Nachrichten (ganz) -> Störbild -> Auge (ganz) -> Störbild -> Nachrichten ...
+// Einmal tippen = Vollbild. Bildschirm bleibt an (über HTTPS).
 // ---------------------------------------------------------------------------
-var P = new URLSearchParams(location.search);
-var DEBUG = P.get('debug') === '1';
-var MIRROR = P.get('spiegeln') !== '0';
-var SCHWELLE = parseFloat(P.get('schwelle') || '0.03');
-var WARTEN = parseFloat(P.get('warten') || '6');
-
 var news = document.getElementById('news');
+var auge = document.getElementById('auge');
 var st = document.getElementById('stoer'), sctx = st.getContext('2d');
-var dbg = document.getElementById('debug'), dtext = document.getElementById('dtext');
-var dcam = document.getElementById('dcam'), dctx = dcam.getContext('2d');
-if (DEBUG) dbg.style.display = 'block';
 
-// ---------------- Dein Augen-Video: Abschnitte (Sekunden in video/auge_echt.mp4) ----------------
-var augeV = document.getElementById('augeV');
-var CLIP = {
-  zuStart: 0.6,      // geschlossen, ab 1,1 s reißt das Auge auf
-  schreckEnde: 2.6,  // bis hier weit aufgerissen
-  mitte: [8.6, 10.5],// geradeaus (läuft in Schleife)
-  links: 5.5, rechts: 3.55, oben: 3.1, unten: 7.4,   // Blickrichtungen (Standbild)
-  schliessen: 10.6, geschlossen: 11.5
-};
-var A = { tx: 0, ty: 0 };
-var modus = 'news';           // news | stoer_rein | schreck | folgen | zu | stoer_raus
-var modusSeit = 0, zuletztGesehen = 0, zone = 'mitte', zoneKandidat = 'mitte', zoneSeit = 0;
-function setzeModus(m) { modus = m; modusSeit = performance.now(); }
-function springe(t, spielen) { try { augeV.currentTime = t; } catch (e) {} if (spielen) augeV.play(); else augeV.pause(); }
-function zielZone() {
-  if (A.ty < -10) return 'oben';
-  if (A.ty > 12) return 'unten';
-  if (A.tx < -28) return 'links';
-  if (A.tx > 28) return 'rechts';
-  return 'mitte';
-}
-function zeigeZone(z) {
-  zone = z;
-  if (z === 'mitte') springe(CLIP.mitte[0] + Math.random() * 0.8, true);
-  else springe(CLIP[z], false);
-}
-
-// ---------------- Störbild ----------------
-function zeichneStoer(staerke) {
-  var img = sctx.createImageData(160, 90), d = img.data;
-  for (var i = 0; i < d.length; i += 4) { var v = Math.random() * 255; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
-  sctx.putImageData(img, 0, 0);
-  var farben = ['#fff', '#ff0', '#0ff', '#0f0', '#f0f', '#f00', '#00f'];
-  for (var b = 0; b < 4; b++) {               // zerrissene Farbbalken
-    var y = Math.random() * 90, h = 2 + Math.random() * 10;
-    for (var f = 0; f < 7; f++) { sctx.fillStyle = farben[f]; sctx.globalAlpha = 0.6; sctx.fillRect(f * 23 + (Math.random() - .5) * 30, y, 23, h); }
+function stoerbild(dauer, mitte, danach) {
+  var start = performance.now(), gewechselt = false;
+  function bild(now) {
+    var t = now - start;
+    var img = sctx.createImageData(160, 90), d = img.data;
+    for (var i = 0; i < d.length; i += 4) { var v = Math.random() * 255; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+    sctx.putImageData(img, 0, 0);
+    var farben = ['#fff', '#ff0', '#0ff', '#0f0', '#f0f', '#f00', '#00f'];
+    for (var b = 0; b < 4; b++) {
+      var y = Math.random() * 90, h = 2 + Math.random() * 10;
+      for (var f = 0; f < 7; f++) { sctx.fillStyle = farben[f]; sctx.globalAlpha = 0.6; sctx.fillRect(f * 23 + (Math.random() - .5) * 30, y, 23, h); }
+    }
+    sctx.globalAlpha = 1;
+    st.style.opacity = t < 100 ? 0.5 : 0.95;
+    if (!gewechselt && t > dauer / 2) { gewechselt = true; mitte(); }
+    if (t < dauer) requestAnimationFrame(bild);
+    else { st.style.opacity = 0; if (danach) danach(); }
   }
-  sctx.globalAlpha = 1;
-  st.style.opacity = staerke;
+  requestAnimationFrame(bild);
 }
 
-// ---------------- Ablauf ----------------
-function schritt(now) {
-  var t = (now - modusSeit) / 1000, vt = augeV.currentTime;
-  if (modus === 'news') {
-    augeV.style.opacity = 0; st.style.opacity = 0;
-  } else if (modus === 'stoer_rein') {
-    zeichneStoer(t < 0.15 ? 0.5 : 0.95);
-    if (t < 0.1) springe(CLIP.zuStart, false);
-    if (t > 0.35) { news.style.opacity = 0; augeV.style.opacity = 1; }
-    if (t > 0.7) { st.style.opacity = 0; springe(CLIP.zuStart, true); setzeModus('schreck'); }
-  } else if (modus === 'schreck') {
-    // Schreck: kurzes Heranzoomen und Zittern, während das Auge aufreißt
-    if (vt > 1.1 && vt < 2.2) {
-      var k = 1 - (vt - 1.1) / 1.1, sx = (Math.random() - .5) * 14 * k, sy = (Math.random() - .5) * 14 * k;
-      augeV.style.transform = 'translate(' + sx + 'px,' + sy + 'px) scale(' + (1 + 0.07 * k) + ')';
-    } else augeV.style.transform = '';
-    if (vt >= CLIP.schreckEnde) { augeV.style.transform = ''; zeigeZone(zielZone()); zoneKandidat = zone; setzeModus('folgen'); }
-  } else if (modus === 'folgen') {
-    var z = zielZone();
-    if (z !== zoneKandidat) { zoneKandidat = z; zoneSeit = now; }
-    if (zoneKandidat !== zone && now - zoneSeit > 300) zeigeZone(zoneKandidat);
-    if (zone === 'mitte' && vt >= CLIP.mitte[1]) springe(CLIP.mitte[0], true);
-    if ((now - zuletztGesehen) / 1000 > WARTEN) { springe(CLIP.schliessen, true); setzeModus('zu'); }
-  } else if (modus === 'zu') {
-    if (vt >= CLIP.geschlossen) augeV.pause();
-    if (personDa && t > 0.3) { zeigeZone(zielZone()); setzeModus('folgen'); }
-    else if (t > 1.6) setzeModus('stoer_raus');
-  } else if (modus === 'stoer_raus') {
-    zeichneStoer(0.95);
-    if (t > 0.25) { augeV.style.opacity = 0; news.style.opacity = 1; }
-    if (t > 0.55) { st.style.opacity = 0; augeV.pause(); setzeModus('news'); }
-  }
-  requestAnimationFrame(schritt);
+function zeigeAuge() {
+  stoerbild(700, function () {
+    news.pause(); news.style.opacity = 0;
+    auge.currentTime = 0; auge.style.opacity = 1; auge.play();
+  });
 }
-
-// ---------------- Kamera: Bewegung und Position erkennen ----------------
-var cam = document.createElement('video'); cam.muted = true; cam.playsInline = true; cam.setAttribute('playsinline', '');
-var KW = 80, KH = 60, kc = document.createElement('canvas'); kc.width = KW; kc.height = KH;
-var kctx = kc.getContext('2d', { willReadFrequently: true });
-var hintergrund = null, anteil = 0, personDa = false, treffer = 0, kameraOk = false;
-
-function messen() {
-  if (!kameraOk || cam.readyState < 2) return;
-  kctx.drawImage(cam, 0, 0, KW, KH);
-  var d = kctx.getImageData(0, 0, KW, KH).data, n = KW * KH;
-  var g = new Float32Array(n), mg = 0;
-  for (var i = 0; i < n; i++) { g[i] = d[4 * i] * 0.3 + d[4 * i + 1] * 0.59 + d[4 * i + 2] * 0.11; mg += g[i]; }
-  mg /= n;
-  if (!hintergrund) { hintergrund = g; return; }
-  var mb = 0; for (i = 0; i < n; i++) mb += hintergrund[i]; mb /= n;
-  var k = mb > 1 ? mg / mb : 1;               // Helligkeitsänderung der Kamera ausgleichen
-  var cnt = 0, sx = 0, sy = 0;
-  if (DEBUG) var dbgImg = dctx.createImageData(KW, KH);
-  for (i = 0; i < n; i++) {
-    var diff = Math.abs(g[i] - hintergrund[i] * k);
-    var fg = diff > 28;
-    if (fg) { cnt++; sx += i % KW; sy += (i / KW) | 0; }
-    hintergrund[i] += (g[i] / k - hintergrund[i]) * (fg ? 0.004 : 0.06);
-    if (DEBUG) { var p = 4 * i; dbgImg.data[p] = fg ? 255 : g[i] * .5; dbgImg.data[p + 1] = g[i] * .5; dbgImg.data[p + 2] = g[i] * .5; dbgImg.data[p + 3] = 255; }
-  }
-  anteil = anteil * 0.6 + (cnt / n) * 0.4;
-  if (anteil > SCHWELLE) { treffer++; } else { treffer = Math.max(0, treffer - 1); }
-  personDa = treffer >= 3;
-  if (personDa) {
-    zuletztGesehen = performance.now();
-    var gx = sx / cnt / KW, gy = sy / cnt / KH;
-    if (MIRROR) gx = 1 - gx;
-    A.tx = Math.max(-78, Math.min(78, (gx - 0.5) * 2 * 90));
-    A.ty = Math.max(-24, Math.min(24, (gy - 0.45) * 2 * 30));
-    if (modus === 'news') setzeModus('stoer_rein');
-  }
-  if (DEBUG) { dctx.putImageData(dbgImg, 0, 0); dtext.textContent = 'Bewegung ' + (anteil * 100).toFixed(1) + '%  Person: ' + (personDa ? 'ja' : 'nein') + '  ' + modus; }
+function zeigeNachrichten() {
+  stoerbild(600, function () {
+    auge.pause(); auge.style.opacity = 0;
+    news.currentTime = 0; news.style.opacity = 1; news.play();
+  });
 }
+news.addEventListener('ended', zeigeAuge);
+auge.addEventListener('ended', zeigeNachrichten);
 
-function kameraStarten() {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { ohneKamera(); return; }
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } }, audio: false })
-    .then(function (s) { cam.srcObject = s; cam.play(); kameraOk = true; setInterval(messen, 100); })
-    .catch(ohneKamera);
-}
-// Ohne Kamera: Auge alle 40 Sekunden für eine Weile zeigen, mit zufälligen Blicken
-function ohneKamera() {
-  if (DEBUG) dtext.textContent = 'Keine Kamera – Zufallsmodus';
-  setInterval(function () { if (modus === 'news') { zuletztGesehen = performance.now() + 9000; setzeModus('stoer_rein'); } }, 40000);
-  setInterval(function () { A.tx = (Math.random() - .5) * 150; A.ty = (Math.random() - .5) * 40; }, 1800);
-}
+// Start (falls Autoplay blockiert ist, startet es beim ersten Tippen)
+var p = news.play(); if (p && p.catch) p.catch(function () {});
 
-// ---------------- Start, Vollbild, Bildschirm wach halten ----------------
 var sperre = null;
 function wachHalten() {
   if ('wakeLock' in navigator && !sperre)
     navigator.wakeLock.request('screen').then(function (s) { sperre = s; s.addEventListener('release', function () { sperre = null; }); }).catch(function () {});
 }
-document.getElementById('start').addEventListener('click', function () {
-  this.style.display = 'none';
+wachHalten();
+document.addEventListener('click', function () {
+  if (news.style.opacity !== '0') news.play(); else auge.play();
   var el = document.documentElement, fs = el.requestFullscreen || el.webkitRequestFullscreen;
-  if (fs) { try { fs.call(el); } catch (e) {} }
-  news.play(); augeV.play().then(function () { augeV.pause(); augeV.currentTime = CLIP.zuStart; }).catch(function () {});
-  wachHalten(); kameraStarten();
-  requestAnimationFrame(schritt);
+  if (fs && !document.fullscreenElement && !document.webkitFullscreenElement) { try { fs.call(el); } catch (e) {} }
+  wachHalten();
 });
-document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { wachHalten(); news.play(); } });
-document.addEventListener('keydown', function (e) {
-  if (e.key === 'a' || e.key === 'A') { zuletztGesehen = performance.now(); if (modus === 'news') setzeModus('stoer_rein'); }
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState === 'visible') { wachHalten(); (news.style.opacity === '0' ? auge : news).play(); }
 });
 </script>
 </body>

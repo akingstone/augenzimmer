@@ -5,22 +5,12 @@ Ein altes Handy steckt als Bildschirm im Zimmer und spielt das Augen-Video in Da
 
 ## Ablauf auf dem Handy
 
-Die Nachrichten (`video/nachrichten.mp4`) laufen in Schleife. Erkennt die Frontkamera eine Person vor dem Zimmer, kommt ein Störbild,
-Annikas gefilmtes Auge (`video/auge_echt.mp4`) reißt erschrocken auf und folgt der Person mit dem Blick. Ist 6 Sekunden niemand mehr da, schließt es sich
-und die Nachrichten laufen weiter. Das Kamerabild wird nur im Handy ausgewertet, nichts wird gespeichert oder gesendet.
+Einfache Schleife: `video/nachrichten.mp4` läuft einmal ganz, dann ein kurzes Störbild, dann `video/auge.mp4`
+(Auge öffnet sich erschrocken, schaut umher, schließt sich), dann wieder Störbild und Nachrichten – endlos.
+Einmal tippen schaltet in den Vollbildmodus; der Bildschirm bleibt an (Wake Lock über HTTPS).
 
-Für das Nachverfolgen springt die Seite im Augen-Video an die passende Stelle (Zeiten oben in `index.html` unter `CLIP`):
-geschlossen 0,6 s · Aufreißen ab 1,1 s · links 5,5 s · rechts 3,55 s · oben 3,1 s · unten 7,4 s · geradeaus 8,6–10,5 s (Schleife) · Schließen ab 10,6 s.
-`auge_echt.mp4` ist aus `IMG_1214.mov` entstanden: stabilisiert, auf 16:9 zugeschnitten, mit dichten Schlüsselbildern für schnelles Springen.
-`video/auge.mp4` ist dieselbe Aufnahme als normales Video (z. B. für den Video-Link in der Mappe).
-Der Ordner `auge/` (gezeichnetes Auge) wird nicht mehr benutzt.
-
-Einstellungen über die Adresse, z. B. `https://akingstone.github.io/augenzimmer/?debug=1`:
-- `debug=1` – Kamerabild und Messwerte anzeigen
-- `spiegeln=0` – Blickrichtung links/rechts tauschen, falls das Auge in die falsche Richtung schaut
-- `schwelle=0.02` – empfindlicher (Standard 0.03)
-- `warten=10` – Sekunden ohne Person, bis das Auge zugeht (Standard 6)
-- Am Computer: Taste `A` löst das Auge testweise aus
+Die Version mit Kamera-Auslöser und Blickverfolgung ist im Verlauf (Commit „Echtes Augen-Video …“) gespeichert
+und kann später wieder aufgegriffen werden. Die Datei `video/auge_echt.mp4` gehört zu dieser Version.
 
 ## Neues Augen-Video einsetzen
 
