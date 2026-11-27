@@ -1,0 +1,99 @@
+{
+ "ticker": [
+  "CO2-Konzentration 2025: 426 ppm (Umweltbundesamt)",
+  "2025 rund 1,44 °C wärmer als vor der Industrialisierung",
+  "Deutschland seit 1881 um 2,5 °C wärmer",
+  "Hitzewellen und Starkregen werden häufiger und heftiger (IPCC)",
+  "1,5-Grad-Grenze im 20-Jahres-Mittel voraussichtlich Anfang der 2030er erreicht (IPCC)",
+  "Energiebedingter CO2-Ausstoß 2024: 38,1 Milliarden Tonnen"
+ ],
+ "segments": [
+  {
+   "file": "Clips/_schnitt/feuer1.mp4",
+   "dur": 5,
+   "tag": "EILMELDUNG",
+   "headline": "Feuerwalze frisst sich durch die Wälder",
+   "sub": "Camp Fire, Kalifornien · November 2018"
+  },
+  {
+   "file": "Clips/_schnitt/feuer2.mp4",
+   "dur": 3.4,
+   "tag": "EILMELDUNG",
+   "headline": "Feuerwalze frisst sich durch die Wälder",
+   "sub": "Camp Fire, Kalifornien · November 2018"
+  },
+  {
+   "file": "Clips/_schnitt/lahaina1.mp4",
+   "dur": 3,
+   "tag": "LIVE",
+   "headline": "Feuersturm zerstört ganze Stadt",
+   "sub": "Lahaina, Hawaii · August 2023"
+  },
+  {
+   "file": "Clips/_schnitt/lahaina2.mp4",
+   "dur": 3,
+   "tag": "LIVE",
+   "headline": "Feuersturm zerstört ganze Stadt",
+   "sub": "Lahaina, Hawaii · August 2023"
+  },
+  {
+   "file": "Clips/_schnitt/lahaina3.mp4",
+   "dur": 3.4,
+   "tag": "LIVE",
+   "headline": "Feuersturm zerstört ganze Stadt",
+   "sub": "Lahaina, Hawaii · August 2023"
+  },
+  {
+   "file": "Clips/_schnitt/leine.mp4",
+   "dur": 5,
+   "tag": "UNWETTER",
+   "headline": "Flüsse treten über die Ufer",
+   "sub": "Leine bei Hemmingen, Niedersachsen · Juli 2017"
+  },
+  {
+   "file": "Clips/Consequences_of_the_floodings_in_Ahrweiler,_Germany.3.jpg",
+   "still": true,
+   "dur": 2.6,
+   "tag": "UNWETTER",
+   "headline": "Flutkatastrophe im Ahrtal",
+   "sub": "Ahrweiler, Rheinland-Pfalz · Juli 2021",
+   "credit": "Foto: © European Union, CC BY 4.0"
+  },
+  {
+   "file": "Clips/Consequences_of_the_floodings_in_Ahrweiler,_Germany.28.jpg",
+   "still": true,
+   "dur": 2.6,
+   "tag": "UNWETTER",
+   "headline": "Flutkatastrophe im Ahrtal",
+   "sub": "Ahrweiler, Rheinland-Pfalz · Juli 2021",
+   "credit": "Foto: © European Union, CC BY 4.0"
+  },
+  {
+   "file": "Clips/Consequences_of_the_floodings_in_Ahrweiler,_Germany.55.jpg",
+   "still": true,
+   "dur": 2.6,
+   "tag": "UNWETTER",
+   "headline": "Flutkatastrophe im Ahrtal",
+   "sub": "Ahrweiler, Rheinland-Pfalz · Juli 2021",
+   "credit": "Foto: © European Union, CC BY 4.0"
+  },
+  {
+   "file": "Clips/_schnitt/sturm1.mp4",
+   "dur": 2.5,
+   "tag": "EILMELDUNG",
+   "headline": "Drei Monster-Hurrikane in Folge",
+   "sub": "Harvey, Irma, Maria · Atlantik, Herbst 2017",
+   "credit": "Bild: NASA",
+   "zoom": 1.18
+  },
+  {
+   "file": "Clips/_schnitt/sturm2.mp4",
+   "dur": 3.1,
+   "tag": "EILMELDUNG",
+   "headline": "Drei Monster-Hurrikane in Folge",
+   "sub": "Harvey, Irma, Maria · Atlantik, Herbst 2017",
+   "credit": "Bild: NASA",
+   "zoom": 1.18
+  }
+ ]
+}

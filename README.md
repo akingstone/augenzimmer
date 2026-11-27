@@ -28,3 +28,16 @@ Solange `video/auge.mp4` fehlt, zeigt die Seite ein gezeichnetes Ersatz-Auge, da
 - Besser noch: **Zum Home-Bildschirm hinzufügen** und von dort starten – dann ohne Browserleiste.
 - Automatische Bildschirmsperre in den Handy-Einstellungen ausschalten und Ladekabel anschließen.
 - Seite einmal laden, solange WLAN da ist; das Video läuft danach in Schleife.
+
+## Nachrichten-Video (`video/nachrichten.mp4`)
+
+Ausgedachter Sender „INNENWELT 24“ mit echten, frei lizenzierten Aufnahmen. Laufband-Zahlen aus Umweltbundesamt- und IPCC-Zusammenfassungen.
+Neu bauen: `python3 werkzeug/nachrichten_bauen.py werkzeug/nachrichten_segmente.json video/nachrichten.mp4` (Pfade in der JSON anpassen).
+
+### Bildnachweise
+- Camp Fire, Kalifornien 2018: California Air National Guard / DVIDS, gemeinfrei (Wikimedia Commons, `DOD_106218663.webm`)
+- Lahaina, Hawaii 2023: B-Roll of Hawaii Wildfire, DVIDS, gemeinfrei (Wikimedia Commons)
+- Leine-Hochwasser Hemmingen 2017: Wikimedia Commons, CC0
+- Ahrtal 2021: Jean-Christophe Verhaegen / © European Union, CC BY 4.0 (Wikimedia Commons, „Consequences of the floodings in Ahrweiler, Germany“ Nr. 3, 28, 55)
+- Hurrikane 2017: NASA Goddard, „Intense String of Hurricanes Seen From Space“, gemeinfrei
+- Augen-Video: Zeichnung „Trauer“ von Annika Königstein, animiert
